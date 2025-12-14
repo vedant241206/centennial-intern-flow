@@ -14,7 +14,134 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      interns: {
+        Row: {
+          accepted_offer_letter: boolean | null
+          created_at: string
+          date_applied: string | null
+          duration: string | null
+          email: string | null
+          full_time_conversion: boolean | null
+          id: string
+          intern_name: string
+          internship_status: string
+          internship_type: string
+          interviewer: string | null
+          joining_date: string | null
+          notes: string | null
+          offer_letter_url: string | null
+          owner_id: string
+          phone_number: string | null
+          resume_url: string | null
+          sr_no: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accepted_offer_letter?: boolean | null
+          created_at?: string
+          date_applied?: string | null
+          duration?: string | null
+          email?: string | null
+          full_time_conversion?: boolean | null
+          id?: string
+          intern_name: string
+          internship_status?: string
+          internship_type?: string
+          interviewer?: string | null
+          joining_date?: string | null
+          notes?: string | null
+          offer_letter_url?: string | null
+          owner_id: string
+          phone_number?: string | null
+          resume_url?: string | null
+          sr_no: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accepted_offer_letter?: boolean | null
+          created_at?: string
+          date_applied?: string | null
+          duration?: string | null
+          email?: string | null
+          full_time_conversion?: boolean | null
+          id?: string
+          intern_name?: string
+          internship_status?: string
+          internship_type?: string
+          interviewer?: string | null
+          joining_date?: string | null
+          notes?: string | null
+          offer_letter_url?: string | null
+          owner_id?: string
+          phone_number?: string | null
+          resume_url?: string | null
+          sr_no?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interns_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      users: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

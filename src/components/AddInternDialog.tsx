@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Intern, InternshipStatus, InternshipType } from "@/types/intern";
-import { Star } from "lucide-react";
 
 interface AddInternDialogProps {
   open: boolean;
@@ -41,9 +40,8 @@ const AddInternDialog = ({ open, onOpenChange, onAdd }: AddInternDialogProps) =>
     duration: "",
     accepted_offer_letter: false,
     notes: "",
-    performance_rating: 0,
     full_time_conversion: false,
-    person_id: "",
+    user_id: "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -65,9 +63,8 @@ const AddInternDialog = ({ open, onOpenChange, onAdd }: AddInternDialogProps) =>
       duration: "",
       accepted_offer_letter: false,
       notes: "",
-      performance_rating: 0,
       full_time_conversion: false,
-      person_id: "",
+      user_id: "",
     });
   };
 
@@ -218,42 +215,6 @@ const AddInternDialog = ({ open, onOpenChange, onAdd }: AddInternDialogProps) =>
               }
               placeholder="e.g., 3 months, 6 months"
             />
-          </div>
-
-          {/* Performance Rating */}
-          <div className="space-y-2">
-            <Label>Performance Rating</Label>
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  onClick={() =>
-                    setFormData({ ...formData, performance_rating: star })
-                  }
-                  className="p-1 hover:scale-110 transition-transform"
-                >
-                  <Star
-                    className={`h-6 w-6 ${
-                      star <= formData.performance_rating
-                        ? "fill-warning text-warning"
-                        : "text-muted-foreground/30"
-                    }`}
-                  />
-                </button>
-              ))}
-              {formData.performance_rating > 0 && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFormData({ ...formData, performance_rating: 0 })
-                  }
-                  className="ml-2 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
           </div>
 
           {/* Toggles */}

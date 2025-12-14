@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { Mail, Lock, User, ArrowRight } from "lucide-react";
 import Header from "@/components/Header";
+import { supabase } from "@/integrations/supabase/client";
+import logo from "@/assets/logo.jpg";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -19,20 +21,45 @@ const Auth = () => {
   const [signupPassword, setSignupPassword] = useState("");
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
 
+  useEffect(() => {
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (session?.user) {
+          navigate("/users");
+        }
+      }
+    );
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        navigate("/users");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
   const handleGoogleLogin = async () => {
     setIsLoading(true);
-    // TODO: Implement Google OAuth with Supabase
-    toast({
-      title: "Google Login",
-      description: "Google authentication will be available once Lovable Cloud is connected.",
-    });
-    // For demo, navigate to persons page
-    setTimeout(() => {
-      localStorage.setItem("isAuthenticated", "true");
-      localStorage.setItem("userName", "Demo User");
-      navigate("/persons");
+    try {
+      const redirectUrl = `${window.location.origin}/users`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+        }
+      });
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to sign in with Google",
+        variant: "destructive",
+      });
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -46,17 +73,26 @@ const Auth = () => {
       return;
     }
     setIsLoading(true);
-    // TODO: Implement email login with Supabase
-    setTimeout(() => {
-      localStorage.setItem("isAuthenticated", "true");
-      localStorage.setItem("userName", loginEmail.split("@")[0]);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: loginPassword,
+      });
+      if (error) throw error;
       toast({
         title: "Welcome back!",
         description: "You have successfully logged in.",
       });
-      navigate("/persons");
+      navigate("/users");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Invalid email or password",
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -86,17 +122,38 @@ const Auth = () => {
       return;
     }
     setIsLoading(true);
-    // TODO: Implement signup with Supabase
-    setTimeout(() => {
-      localStorage.setItem("isAuthenticated", "true");
-      localStorage.setItem("userName", signupName);
+    try {
+      const redirectUrl = `${window.location.origin}/users`;
+      const { error } = await supabase.auth.signUp({
+        email: signupEmail,
+        password: signupPassword,
+        options: {
+          emailRedirectTo: redirectUrl,
+          data: {
+            full_name: signupName,
+          }
+        }
+      });
+      if (error) {
+        if (error.message.includes("already registered")) {
+          throw new Error("This email is already registered. Please sign in instead.");
+        }
+        throw error;
+      }
       toast({
         title: "Account created!",
         description: "Welcome to Centennial Infotech.",
       });
-      navigate("/persons");
+      navigate("/users");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create account",
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -107,8 +164,12 @@ const Auth = () => {
         <div className="w-full max-w-md animate-slide-up">
           <Card className="border-border shadow-elevated">
             <CardHeader className="text-center pb-2">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-display font-bold text-2xl shadow-glow">
-                CI
+              <div className="mx-auto mb-4">
+                <img 
+                  src={logo} 
+                  alt="Centennial Infotech Logo" 
+                  className="h-20 w-auto object-contain mx-auto"
+                />
               </div>
               <CardTitle className="font-display text-2xl">Welcome</CardTitle>
               <CardDescription>

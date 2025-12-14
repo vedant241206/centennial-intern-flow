@@ -9,48 +9,75 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { Plus, Trash2, Search, User } from "lucide-react";
 import Header from "@/components/Header";
-import { Person } from "@/types/intern";
+import { User as UserType } from "@/types/intern";
+import { supabase } from "@/integrations/supabase/client";
 
 const PersonSelection = () => {
   const navigate = useNavigate();
-  const [persons, setPersons] = useState<Person[]>([]);
+  const [users, setUsers] = useState<UserType[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [newPersonName, setNewPersonName] = useState("");
+  const [newUserName, setNewUserName] = useState("");
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [selectedForDelete, setSelectedForDelete] = useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<any>(null);
 
   useEffect(() => {
-    // Check authentication
-    const isAuthenticated = localStorage.getItem("isAuthenticated");
-    if (!isAuthenticated) {
-      navigate("/auth");
-      return;
-    }
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        if (!session) {
+          navigate("/auth");
+        }
+      }
+    );
 
-    // Load persons from localStorage (will be replaced with Supabase)
-    const savedPersons = localStorage.getItem("persons");
-    if (savedPersons) {
-      setPersons(JSON.parse(savedPersons));
-    } else {
-      // Add some demo data
-      const demoPersons: Person[] = [
-        { id: "1", name: "HR Department", created_at: new Date().toISOString(), updated_at: new Date().toISOString(), user_id: "demo" },
-        { id: "2", name: "Engineering Team", created_at: new Date().toISOString(), updated_at: new Date().toISOString(), user_id: "demo" },
-        { id: "3", name: "Marketing Division", created_at: new Date().toISOString(), updated_at: new Date().toISOString(), user_id: "demo" },
-      ];
-      setPersons(demoPersons);
-      localStorage.setItem("persons", JSON.stringify(demoPersons));
-    }
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (!session) {
+        navigate("/auth");
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const filteredPersons = persons.filter((person) =>
-    person.name.toLowerCase().includes(searchQuery.toLowerCase())
+  useEffect(() => {
+    if (session) {
+      fetchUsers();
+    }
+  }, [session]);
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to fetch users",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredUsers = users.filter((user) =>
+    user.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddPerson = () => {
-    if (!newPersonName.trim()) {
+  const handleAddUser = async () => {
+    if (!newUserName.trim()) {
       toast({
         title: "Error",
         description: "Please enter a name",
@@ -59,30 +86,39 @@ const PersonSelection = () => {
       return;
     }
 
-    const newPerson: Person = {
-      id: Date.now().toString(),
-      name: newPersonName.trim(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      user_id: "demo",
-    };
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .insert({
+          name: newUserName.trim(),
+          owner_id: session?.user?.id,
+        })
+        .select()
+        .single();
 
-    const updatedPersons = [...persons, newPerson];
-    setPersons(updatedPersons);
-    localStorage.setItem("persons", JSON.stringify(updatedPersons));
-    setNewPersonName("");
-    setIsAddDialogOpen(false);
-    toast({
-      title: "Success",
-      description: `${newPerson.name} has been added.`,
-    });
+      if (error) throw error;
+
+      setUsers([...users, data]);
+      setNewUserName("");
+      setIsAddDialogOpen(false);
+      toast({
+        title: "Success",
+        description: `${data.name} has been added.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add user",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDeleteSelected = () => {
     if (selectedForDelete.length === 0) {
       toast({
         title: "No selection",
-        description: "Please select persons to delete",
+        description: "Please select users to delete",
         variant: "destructive",
       });
       return;
@@ -90,24 +126,31 @@ const PersonSelection = () => {
     setShowDeleteConfirm(true);
   };
 
-  const confirmDelete = () => {
-    const updatedPersons = persons.filter((p) => !selectedForDelete.includes(p.id));
-    setPersons(updatedPersons);
-    localStorage.setItem("persons", JSON.stringify(updatedPersons));
-    
-    // Also delete associated interns
-    selectedForDelete.forEach((personId) => {
-      localStorage.removeItem(`interns_${personId}`);
-    });
+  const confirmDelete = async () => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .in('id', selectedForDelete);
 
-    toast({
-      title: "Deleted",
-      description: `${selectedForDelete.length} person(s) and their records have been deleted.`,
-    });
-    
-    setSelectedForDelete([]);
-    setIsDeleteMode(false);
-    setShowDeleteConfirm(false);
+      if (error) throw error;
+
+      setUsers(users.filter((u) => !selectedForDelete.includes(u.id)));
+      toast({
+        title: "Deleted",
+        description: `${selectedForDelete.length} user(s) and their records have been deleted.`,
+      });
+      
+      setSelectedForDelete([]);
+      setIsDeleteMode(false);
+      setShowDeleteConfirm(false);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete users",
+        variant: "destructive",
+      });
+    }
   };
 
   const toggleSelectForDelete = (id: string) => {
@@ -116,23 +159,30 @@ const PersonSelection = () => {
     );
   };
 
-  const handlePersonClick = (person: Person) => {
+  const handleUserClick = (user: UserType) => {
     if (isDeleteMode) {
-      toggleSelectForDelete(person.id);
+      toggleSelectForDelete(user.id);
     } else {
-      navigate(`/interns/${person.id}`, { state: { personName: person.name } });
+      navigate(`/interns/${user.id}`, { state: { userName: user.name } });
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
-    localStorage.removeItem("userName");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     navigate("/auth");
     toast({
       title: "Logged out",
       description: "You have been successfully logged out.",
     });
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -146,25 +196,25 @@ const PersonSelection = () => {
               <DialogTrigger asChild>
                 <Button className="gap-2">
                   <Plus className="h-4 w-4" />
-                  Add New Person
+                  Add New User
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Add New Person</DialogTitle>
+                  <DialogTitle>Add New User</DialogTitle>
                   <DialogDescription>
-                    Enter the name for the new person or department.
+                    Enter the name for the new user or department.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <Label htmlFor="person-name">Name</Label>
+                    <Label htmlFor="user-name">Name</Label>
                     <Input
-                      id="person-name"
+                      id="user-name"
                       placeholder="e.g., HR Department"
-                      value={newPersonName}
-                      onChange={(e) => setNewPersonName(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleAddPerson()}
+                      value={newUserName}
+                      onChange={(e) => setNewUserName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAddUser()}
                     />
                   </div>
                 </div>
@@ -172,7 +222,7 @@ const PersonSelection = () => {
                   <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={handleAddPerson}>Add</Button>
+                  <Button onClick={handleAddUser}>Add</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -205,7 +255,7 @@ const PersonSelection = () => {
                 onClick={() => setIsDeleteMode(true)}
               >
                 <Trash2 className="h-4 w-4" />
-                Delete Person
+                Delete User
               </Button>
             )}
           </div>
@@ -213,7 +263,7 @@ const PersonSelection = () => {
           <div className="relative w-full sm:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search persons..."
+              placeholder="Search users..."
               className="pl-10"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -224,37 +274,37 @@ const PersonSelection = () => {
         {/* Title */}
         <div className="text-center mb-10">
           <h2 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-2">
-            Select the Person or User
+            Select the User
           </h2>
           <p className="text-muted-foreground">
-            Choose a person to view and manage their intern records
+            Choose a user to view and manage their intern records
           </p>
         </div>
 
-        {/* Person List */}
-        {filteredPersons.length === 0 ? (
+        {/* User List */}
+        {filteredUsers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted mb-4">
               <User className="h-10 w-10 text-muted-foreground" />
             </div>
             <h3 className="text-lg font-medium text-foreground mb-2">
-              {searchQuery ? "No results found" : "No persons added yet"}
+              {searchQuery ? "No results found" : "No users added yet"}
             </h3>
             <p className="text-muted-foreground mb-4">
               {searchQuery
                 ? "Try a different search term"
-                : "Click 'Add New Person' to get started"}
+                : "Click 'Add New User' to get started"}
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredPersons.map((person, index) => (
+            {filteredUsers.map((user, index) => (
               <button
-                key={person.id}
-                onClick={() => handlePersonClick(person)}
+                key={user.id}
+                onClick={() => handleUserClick(user)}
                 className={`
                   relative flex items-center gap-3 p-5 rounded-full border-2 transition-all duration-300
-                  ${isDeleteMode && selectedForDelete.includes(person.id)
+                  ${isDeleteMode && selectedForDelete.includes(user.id)
                     ? "border-destructive bg-destructive/10"
                     : "border-border bg-card hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-lg hover:scale-[1.02]"
                   }
@@ -264,14 +314,14 @@ const PersonSelection = () => {
               >
                 {isDeleteMode && (
                   <Checkbox
-                    checked={selectedForDelete.includes(person.id)}
+                    checked={selectedForDelete.includes(user.id)}
                     className="pointer-events-none"
                   />
                 )}
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
                   <User className="h-5 w-5" />
                 </div>
-                <span className="font-medium truncate">{person.name}</span>
+                <span className="font-medium truncate">{user.name}</span>
               </button>
             ))}
           </div>
@@ -281,10 +331,9 @@ const PersonSelection = () => {
         <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+              <AlertDialogTitle>Are you sure you want to delete?</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete {selectedForDelete.length} person(s)?
-                This will also delete all intern records associated with them.
+                This will delete {selectedForDelete.length} user(s) and all intern records associated with them.
                 This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -294,7 +343,7 @@ const PersonSelection = () => {
                 onClick={confirmDelete}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Delete
+                Yes, Delete
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
