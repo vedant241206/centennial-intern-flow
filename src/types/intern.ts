@@ -29,19 +29,19 @@ export interface Intern {
   resume_url?: string;
   offer_letter_url?: string;
   notes: string;
-  performance_rating: number;
   full_time_conversion: boolean;
-  person_id: string;
+  user_id: string;
+  owner_id?: string;
   created_at: string;
   updated_at: string;
 }
 
-export interface Person {
+export interface User {
   id: string;
   name: string;
+  owner_id: string;
   created_at: string;
   updated_at: string;
-  user_id: string;
 }
 
 export interface CustomField {
@@ -51,5 +51,5 @@ export interface CustomField {
   is_required: boolean;
   dropdown_options?: string[];
   field_order: number;
-  person_id: string;
+  user_id: string;
 }

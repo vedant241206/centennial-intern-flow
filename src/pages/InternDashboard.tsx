@@ -13,19 +13,22 @@ import {
 } from "@/components/ui/table";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import {
   Plus,
@@ -34,14 +37,10 @@ import {
   Search,
   ArrowLeft,
   Filter,
-  Columns3,
   MoreHorizontal,
   Edit,
   Trash2,
   Eye,
-  Star,
-  Check,
-  X,
 } from "lucide-react";
 import Header from "@/components/Header";
 import AddInternDialog from "@/components/AddInternDialog";
@@ -49,6 +48,7 @@ import EditInternDialog from "@/components/EditInternDialog";
 import ViewInternDialog from "@/components/ViewInternDialog";
 import ImportDialog from "@/components/ImportDialog";
 import { Intern, InternshipStatus, InternshipType } from "@/types/intern";
+import { supabase } from "@/integrations/supabase/client";
 
 const statusColors: Record<InternshipStatus, string> = {
   Applied: "bg-blue-100 text-blue-800 border-blue-200",
@@ -64,15 +64,14 @@ const allColumns = [
   { key: "intern_name", label: "Intern Name" },
   { key: "email", label: "Email" },
   { key: "phone_number", label: "Phone" },
-  { key: "internship_status", label: "Status" },
+  { key: "internship_status", label: "Status", filterable: true },
   { key: "date_applied", label: "Date Applied" },
-  { key: "interviewer", label: "Interviewer" },
-  { key: "internship_type", label: "Type" },
+  { key: "interviewer", label: "Interviewer", filterable: true },
+  { key: "internship_type", label: "Type", filterable: true },
   { key: "joining_date", label: "Joining Date" },
-  { key: "duration", label: "Duration" },
-  { key: "accepted_offer_letter", label: "Offer Accepted" },
-  { key: "performance_rating", label: "Rating" },
-  { key: "full_time_conversion", label: "Full-Time" },
+  { key: "duration", label: "Duration", filterable: true },
+  { key: "accepted_offer_letter", label: "Offer Accepted", filterable: true },
+  { key: "full_time_conversion", label: "Full-Time", filterable: true },
   { key: "notes", label: "Notes" },
 ];
 
@@ -80,107 +79,78 @@ const InternDashboard = () => {
   const navigate = useNavigate();
   const { personId } = useParams<{ personId: string }>();
   const location = useLocation();
-  const personName = location.state?.personName || "Unknown";
+  const userName = location.state?.userName || "Unknown";
 
   const [interns, setInterns] = useState<Intern[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [visibleColumns, setVisibleColumns] = useState<string[]>([
-    "sr_no",
-    "intern_name",
-    "email",
-    "phone_number",
-    "internship_status",
-    "internship_type",
-    "joining_date",
-    "performance_rating",
-  ]);
+  const [filters, setFilters] = useState<Record<string, string>>({});
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [selectedIntern, setSelectedIntern] = useState<Intern | null>(null);
+  const [editingCell, setEditingCell] = useState<{ id: string; key: string } | null>(null);
+  const [editingValue, setEditingValue] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<any>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [internToDelete, setInternToDelete] = useState<Intern | null>(null);
 
   useEffect(() => {
-    const isAuthenticated = localStorage.getItem("isAuthenticated");
-    if (!isAuthenticated) {
-      navigate("/auth");
-      return;
-    }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        if (!session) {
+          navigate("/auth");
+        }
+      }
+    );
 
-    // Load interns for this person
-    const savedInterns = localStorage.getItem(`interns_${personId}`);
-    if (savedInterns) {
-      setInterns(JSON.parse(savedInterns));
-    } else {
-      // Demo data
-      const demoInterns: Intern[] = [
-        {
-          id: "1",
-          sr_no: 1,
-          intern_name: "John Smith",
-          email: "john.smith@email.com",
-          phone_number: "+1 555-0101",
-          internship_status: "Ongoing",
-          date_applied: "2024-01-15",
-          interviewer: "Sarah Johnson",
-          internship_type: "Remote",
-          joining_date: "2024-02-01",
-          duration: "6 months",
-          accepted_offer_letter: true,
-          notes: "Excellent communication skills",
-          performance_rating: 4,
-          full_time_conversion: false,
-          person_id: personId || "",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          id: "2",
-          sr_no: 2,
-          intern_name: "Emily Davis",
-          email: "emily.davis@email.com",
-          phone_number: "+1 555-0102",
-          internship_status: "Completed",
-          date_applied: "2023-11-20",
-          interviewer: "Michael Brown",
-          internship_type: "Onsite",
-          joining_date: "2023-12-01",
-          duration: "3 months",
-          accepted_offer_letter: true,
-          notes: "Outstanding performance, recommended for full-time",
-          performance_rating: 5,
-          full_time_conversion: true,
-          person_id: personId || "",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          id: "3",
-          sr_no: 3,
-          intern_name: "Alex Chen",
-          email: "alex.chen@email.com",
-          phone_number: "+1 555-0103",
-          internship_status: "Applied",
-          date_applied: "2024-03-01",
-          interviewer: "",
-          internship_type: "Hybrid",
-          joining_date: "",
-          duration: "",
-          accepted_offer_letter: false,
-          notes: "Strong technical background",
-          performance_rating: 0,
-          full_time_conversion: false,
-          person_id: personId || "",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      ];
-      setInterns(demoInterns);
-      localStorage.setItem(`interns_${personId}`, JSON.stringify(demoInterns));
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (!session) {
+        navigate("/auth");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  useEffect(() => {
+    if (session && personId) {
+      fetchInterns();
     }
-  }, [navigate, personId]);
+  }, [session, personId]);
+
+  const fetchInterns = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('interns')
+        .select('*')
+        .eq('user_id', personId)
+        .order('sr_no', { ascending: true });
+
+      if (error) throw error;
+      
+      const mappedData = (data || []).map(intern => ({
+        ...intern,
+        internship_status: intern.internship_status as InternshipStatus,
+        internship_type: intern.internship_type as InternshipType,
+        date_applied: intern.date_applied || '',
+        joining_date: intern.joining_date || '',
+      }));
+      
+      setInterns(mappedData);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to fetch interns",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredInterns = useMemo(() => {
     return interns.filter((intern) => {
@@ -188,67 +158,196 @@ const InternDashboard = () => {
         intern.intern_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         intern.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         intern.phone_number.includes(searchQuery);
-      const matchesStatus =
-        statusFilter === "all" || intern.internship_status === statusFilter;
-      const matchesType =
-        typeFilter === "all" || intern.internship_type === typeFilter;
-      return matchesSearch && matchesStatus && matchesType;
+      
+      const matchesFilters = Object.entries(filters).every(([key, value]) => {
+        if (!value) return true;
+        const internValue = intern[key as keyof Intern];
+        if (typeof internValue === 'boolean') {
+          return value === 'Yes' ? internValue : !internValue;
+        }
+        return String(internValue).toLowerCase().includes(value.toLowerCase());
+      });
+      
+      return matchesSearch && matchesFilters;
     });
-  }, [interns, searchQuery, statusFilter, typeFilter]);
+  }, [interns, searchQuery, filters]);
 
-  const handleAddIntern = (newIntern: Omit<Intern, "id" | "sr_no" | "created_at" | "updated_at">) => {
-    const intern: Intern = {
-      ...newIntern,
-      id: Date.now().toString(),
-      sr_no: interns.length + 1,
-      person_id: personId || "",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    const updatedInterns = [...interns, intern];
-    setInterns(updatedInterns);
-    localStorage.setItem(`interns_${personId}`, JSON.stringify(updatedInterns));
-    setIsAddDialogOpen(false);
-    toast({
-      title: "Intern Added",
-      description: `${intern.intern_name} has been added successfully.`,
+  const getUniqueValues = (key: string) => {
+    const values = interns.map((intern) => {
+      const value = intern[key as keyof Intern];
+      if (typeof value === 'boolean') {
+        return value ? 'Yes' : 'No';
+      }
+      return String(value || '');
     });
+    return [...new Set(values)].filter(Boolean);
   };
 
-  const handleEditIntern = (updatedIntern: Intern) => {
-    const updatedInterns = interns.map((i) =>
-      i.id === updatedIntern.id
-        ? { ...updatedIntern, updated_at: new Date().toISOString() }
-        : i
-    );
-    setInterns(updatedInterns);
-    localStorage.setItem(`interns_${personId}`, JSON.stringify(updatedInterns));
-    setIsEditDialogOpen(false);
-    setSelectedIntern(null);
-    toast({
-      title: "Intern Updated",
-      description: `${updatedIntern.intern_name}'s record has been updated.`,
-    });
+  const handleAddIntern = async (newIntern: Omit<Intern, "id" | "sr_no" | "created_at" | "updated_at">) => {
+    try {
+      const maxSrNo = interns.length > 0 ? Math.max(...interns.map(i => i.sr_no)) : 0;
+      
+      const { data, error } = await supabase
+        .from('interns')
+        .insert({
+          ...newIntern,
+          sr_no: maxSrNo + 1,
+          user_id: personId,
+          owner_id: session?.user?.id,
+          date_applied: newIntern.date_applied || null,
+          joining_date: newIntern.joining_date || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const mappedData = {
+        ...data,
+        internship_status: data.internship_status as InternshipStatus,
+        internship_type: data.internship_type as InternshipType,
+        date_applied: data.date_applied || '',
+        joining_date: data.joining_date || '',
+      };
+
+      setInterns([...interns, mappedData]);
+      setIsAddDialogOpen(false);
+      toast({
+        title: "Intern Added",
+        description: `${data.intern_name} has been added successfully.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add intern",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDeleteIntern = (id: string) => {
-    const intern = interns.find((i) => i.id === id);
-    const updatedInterns = interns.filter((i) => i.id !== id);
-    // Recalculate sr_no
-    const reindexed = updatedInterns.map((intern, index) => ({
-      ...intern,
-      sr_no: index + 1,
-    }));
-    setInterns(reindexed);
-    localStorage.setItem(`interns_${personId}`, JSON.stringify(reindexed));
-    toast({
-      title: "Intern Deleted",
-      description: `${intern?.intern_name} has been removed.`,
-    });
+  const handleEditIntern = async (updatedIntern: Intern) => {
+    try {
+      const { error } = await supabase
+        .from('interns')
+        .update({
+          intern_name: updatedIntern.intern_name,
+          email: updatedIntern.email,
+          phone_number: updatedIntern.phone_number,
+          internship_status: updatedIntern.internship_status,
+          date_applied: updatedIntern.date_applied || null,
+          interviewer: updatedIntern.interviewer,
+          internship_type: updatedIntern.internship_type,
+          joining_date: updatedIntern.joining_date || null,
+          duration: updatedIntern.duration,
+          accepted_offer_letter: updatedIntern.accepted_offer_letter,
+          notes: updatedIntern.notes,
+          full_time_conversion: updatedIntern.full_time_conversion,
+        })
+        .eq('id', updatedIntern.id);
+
+      if (error) throw error;
+
+      setInterns(interns.map((i) =>
+        i.id === updatedIntern.id ? updatedIntern : i
+      ));
+      setIsEditDialogOpen(false);
+      setSelectedIntern(null);
+      toast({
+        title: "Intern Updated",
+        description: `${updatedIntern.intern_name}'s record has been updated.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update intern",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteIntern = (intern: Intern) => {
+    setInternToDelete(intern);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDeleteIntern = async () => {
+    if (!internToDelete) return;
+    
+    try {
+      const { error } = await supabase
+        .from('interns')
+        .delete()
+        .eq('id', internToDelete.id);
+
+      if (error) throw error;
+
+      const updatedInterns = interns
+        .filter((i) => i.id !== internToDelete.id)
+        .map((intern, index) => ({ ...intern, sr_no: index + 1 }));
+      
+      setInterns(updatedInterns);
+      toast({
+        title: "Intern Deleted",
+        description: `${internToDelete.intern_name} has been removed.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete intern",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleteConfirmOpen(false);
+      setInternToDelete(null);
+    }
+  };
+
+  const handleCellClick = (intern: Intern, key: string) => {
+    if (key === 'sr_no') return;
+    setEditingCell({ id: intern.id, key });
+    const value = intern[key as keyof Intern];
+    if (typeof value === 'boolean') {
+      setEditingValue(value ? 'Yes' : 'No');
+    } else {
+      setEditingValue(String(value || ''));
+    }
+  };
+
+  const handleCellBlur = async () => {
+    if (!editingCell) return;
+    
+    const intern = interns.find(i => i.id === editingCell.id);
+    if (!intern) return;
+
+    let newValue: any = editingValue;
+    if (editingCell.key === 'accepted_offer_letter' || editingCell.key === 'full_time_conversion') {
+      newValue = editingValue.toLowerCase() === 'yes';
+    }
+
+    const updatedIntern = { ...intern, [editingCell.key]: newValue };
+    
+    try {
+      const { error } = await supabase
+        .from('interns')
+        .update({ [editingCell.key]: newValue })
+        .eq('id', editingCell.id);
+
+      if (error) throw error;
+
+      setInterns(interns.map(i => i.id === editingCell.id ? updatedIntern : i));
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update",
+        variant: "destructive",
+      });
+    }
+    
+    setEditingCell(null);
+    setEditingValue("");
   };
 
   const handleExport = () => {
-    // Create CSV content
     const headers = allColumns.map((col) => col.label).join(",");
     const rows = interns.map((intern) =>
       allColumns
@@ -262,12 +361,11 @@ const InternDashboard = () => {
     );
     const csv = [headers, ...rows].join("\n");
 
-    // Download
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `interns_${personName.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `interns_${userName.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 
@@ -277,46 +375,79 @@ const InternDashboard = () => {
     });
   };
 
-  const handleImport = (importedInterns: Partial<Intern>[]) => {
-    const newInterns: Intern[] = importedInterns.map((data, index) => ({
-      id: Date.now().toString() + index,
-      sr_no: interns.length + index + 1,
+  const handleImport = async (importedInterns: Partial<Intern>[]) => {
+    const maxSrNo = interns.length > 0 ? Math.max(...interns.map(i => i.sr_no)) : 0;
+    
+    const newInterns = importedInterns.map((data, index) => ({
+      sr_no: maxSrNo + index + 1,
       intern_name: data.intern_name || "",
       email: data.email || "",
       phone_number: data.phone_number || "",
-      internship_status: (data.internship_status as InternshipStatus) || "Applied",
-      date_applied: data.date_applied || new Date().toISOString().split("T")[0],
+      internship_status: data.internship_status || "Applied",
+      date_applied: data.date_applied || null,
       interviewer: data.interviewer || "",
-      internship_type: (data.internship_type as InternshipType) || "Remote",
-      joining_date: data.joining_date || "",
+      internship_type: data.internship_type || "Remote",
+      joining_date: data.joining_date || null,
       duration: data.duration || "",
       accepted_offer_letter: data.accepted_offer_letter || false,
       notes: data.notes || "",
-      performance_rating: data.performance_rating || 0,
       full_time_conversion: data.full_time_conversion || false,
-      person_id: personId || "",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      user_id: personId,
+      owner_id: session?.user?.id,
     }));
 
-    const updatedInterns = [...interns, ...newInterns];
-    setInterns(updatedInterns);
-    localStorage.setItem(`interns_${personId}`, JSON.stringify(updatedInterns));
-    setIsImportDialogOpen(false);
-    toast({
-      title: "Import Complete",
-      description: `${newInterns.length} intern(s) have been imported.`,
-    });
+    try {
+      const { data, error } = await supabase
+        .from('interns')
+        .insert(newInterns)
+        .select();
+
+      if (error) throw error;
+
+      const mappedData = (data || []).map(intern => ({
+        ...intern,
+        internship_status: intern.internship_status as InternshipStatus,
+        internship_type: intern.internship_type as InternshipType,
+        date_applied: intern.date_applied || '',
+        joining_date: intern.joining_date || '',
+      }));
+
+      setInterns([...interns, ...mappedData]);
+      setIsImportDialogOpen(false);
+      toast({
+        title: "Import Complete",
+        description: `${data.length} intern(s) have been imported.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to import interns",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
-    localStorage.removeItem("userName");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     navigate("/auth");
   };
 
   const renderCell = (intern: Intern, columnKey: string) => {
     const value = intern[columnKey as keyof Intern];
+    const isEditing = editingCell?.id === intern.id && editingCell?.key === columnKey;
+
+    if (isEditing) {
+      return (
+        <Input
+          value={editingValue}
+          onChange={(e) => setEditingValue(e.target.value)}
+          onBlur={handleCellBlur}
+          onKeyDown={(e) => e.key === 'Enter' && handleCellBlur()}
+          autoFocus
+          className="h-8 w-full min-w-[100px]"
+        />
+      );
+    }
 
     switch (columnKey) {
       case "internship_status":
@@ -327,26 +458,7 @@ const InternDashboard = () => {
         );
       case "accepted_offer_letter":
       case "full_time_conversion":
-        return value ? (
-          <Check className="h-4 w-4 text-success" />
-        ) : (
-          <X className="h-4 w-4 text-muted-foreground" />
-        );
-      case "performance_rating":
-        return (
-          <div className="flex items-center gap-1">
-            {[1, 2, 3, 4, 5].map((star) => (
-              <Star
-                key={star}
-                className={`h-3.5 w-3.5 ${
-                  star <= (value as number)
-                    ? "fill-warning text-warning"
-                    : "text-muted-foreground/30"
-                }`}
-              />
-            ))}
-          </div>
-        );
+        return value ? "Yes" : "No";
       case "notes":
         return (
           <span className="max-w-[200px] truncate block" title={value as string}>
@@ -358,6 +470,14 @@ const InternDashboard = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header showLogout onLogout={handleLogout} />
@@ -368,14 +488,14 @@ const InternDashboard = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate("/persons")}
+            onClick={() => navigate("/users")}
             className="shrink-0"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
             <h1 className="text-2xl font-display font-bold text-foreground">
-              {personName}
+              {userName}
             </h1>
             <p className="text-sm text-muted-foreground">
               {interns.length} intern{interns.length !== 1 ? "s" : ""} total
@@ -400,73 +520,14 @@ const InternDashboard = () => {
             </Button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-            <div className="relative flex-1 lg:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search interns..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px]">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Applied">Applied</SelectItem>
-                <SelectItem value="Interviewed">Interviewed</SelectItem>
-                <SelectItem value="Accepted">Accepted</SelectItem>
-                <SelectItem value="Rejected">Rejected</SelectItem>
-                <SelectItem value="Ongoing">Ongoing</SelectItem>
-                <SelectItem value="Completed">Completed</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="Remote">Remote</SelectItem>
-                <SelectItem value="Onsite">Onsite</SelectItem>
-                <SelectItem value="Hybrid">Hybrid</SelectItem>
-                <SelectItem value="Paid">Paid</SelectItem>
-                <SelectItem value="Unpaid">Unpaid</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
-                  <Columns3 className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {allColumns.map((column) => (
-                  <DropdownMenuCheckboxItem
-                    key={column.key}
-                    checked={visibleColumns.includes(column.key)}
-                    onCheckedChange={(checked) => {
-                      setVisibleColumns(
-                        checked
-                          ? [...visibleColumns, column.key]
-                          : visibleColumns.filter((c) => c !== column.key)
-                      );
-                    }}
-                  >
-                    {column.label}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+          <div className="relative flex-1 lg:w-64 lg:flex-none">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search interns..."
+              className="pl-10"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
         </div>
 
@@ -476,13 +537,39 @@ const InternDashboard = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {allColumns
-                    .filter((col) => visibleColumns.includes(col.key))
-                    .map((column) => (
-                      <TableHead key={column.key} className="whitespace-nowrap">
+                  {allColumns.map((column) => (
+                    <TableHead key={column.key} className="whitespace-nowrap">
+                      <div className="flex items-center gap-1">
                         {column.label}
-                      </TableHead>
-                    ))}
+                        {column.filterable && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-6 w-6">
+                                <Filter className="h-3 w-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              <DropdownMenuLabel>Filter by {column.label}</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                onClick={() => setFilters(prev => ({ ...prev, [column.key]: '' }))}
+                              >
+                                All
+                              </DropdownMenuItem>
+                              {getUniqueValues(column.key).map((value) => (
+                                <DropdownMenuItem 
+                                  key={value}
+                                  onClick={() => setFilters(prev => ({ ...prev, [column.key]: value }))}
+                                >
+                                  {value}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
+                    </TableHead>
+                  ))}
                   <TableHead className="w-[50px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -490,10 +577,10 @@ const InternDashboard = () => {
                 {filteredInterns.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={visibleColumns.length + 1}
+                      colSpan={allColumns.length + 1}
                       className="h-32 text-center text-muted-foreground"
                     >
-                      {searchQuery || statusFilter !== "all" || typeFilter !== "all"
+                      {searchQuery || Object.values(filters).some(Boolean)
                         ? "No interns match your filters"
                         : "No interns added yet. Click 'Add Intern' to get started."}
                     </TableCell>
@@ -501,50 +588,50 @@ const InternDashboard = () => {
                 ) : (
                   filteredInterns.map((intern) => (
                     <TableRow key={intern.id} className="hover:bg-muted/50">
-                      {allColumns
-                        .filter((col) => visibleColumns.includes(col.key))
-                        .map((column) => (
-                          <TableCell key={column.key} className="whitespace-nowrap">
-                            {renderCell(intern, column.key)}
-                          </TableCell>
-                        ))}
+                      {allColumns.map((column) => (
+                        <TableCell 
+                          key={column.key} 
+                          className="whitespace-nowrap cursor-pointer"
+                          onClick={() => handleCellClick(intern, column.key)}
+                        >
+                          {renderCell(intern, column.key)}
+                        </TableCell>
+                      ))}
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon-sm">
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuCheckboxItem
-                              className="gap-2"
+                            <DropdownMenuItem
                               onClick={() => {
                                 setSelectedIntern(intern);
                                 setIsViewDialogOpen(true);
                               }}
                             >
-                              <Eye className="h-4 w-4" />
+                              <Eye className="h-4 w-4 mr-2" />
                               View Details
-                            </DropdownMenuCheckboxItem>
-                            <DropdownMenuCheckboxItem
-                              className="gap-2"
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               onClick={() => {
                                 setSelectedIntern(intern);
                                 setIsEditDialogOpen(true);
                               }}
                             >
-                              <Edit className="h-4 w-4" />
+                              <Edit className="h-4 w-4 mr-2" />
                               Edit
-                            </DropdownMenuCheckboxItem>
-                            <DropdownMenuCheckboxItem
-                              className="gap-2 text-destructive focus:text-destructive"
-                              onClick={() => handleDeleteIntern(intern.id)}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => handleDeleteIntern(intern)}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4 mr-2" />
                               Delete
-                            </DropdownMenuCheckboxItem>
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -575,6 +662,28 @@ const InternDashboard = () => {
           )}
         </div>
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {internToDelete?.intern_name}'s record.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteIntern}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Yes, Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Dialogs */}
       <AddInternDialog

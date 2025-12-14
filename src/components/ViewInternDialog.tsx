@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Intern, InternshipStatus } from "@/types/intern";
-import { Star, Check, X, Calendar, Mail, Phone, User, Briefcase, Clock, FileText } from "lucide-react";
+import { Check, X, Calendar, Mail, Phone, User, Briefcase, Clock, FileText } from "lucide-react";
 
 interface ViewInternDialogProps {
   open: boolean;
@@ -108,32 +108,17 @@ const ViewInternDialog = ({ open, onOpenChange, intern }: ViewInternDialogProps)
             </div>
           )}
 
-          {/* Performance */}
+          {/* Status */}
           <div className="space-y-3">
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-              Performance & Status
+              Status
             </h3>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">Rating</p>
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Star
-                      key={star}
-                      className={`h-4 w-4 ${
-                        star <= intern.performance_rating
-                          ? "fill-warning text-warning"
-                          : "text-muted-foreground/30"
-                      }`}
-                    />
-                  ))}
-                </div>
-              </div>
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">Offer Accepted</p>
                 <div className="flex items-center gap-2">
                   {intern.accepted_offer_letter ? (
-                    <Check className="h-4 w-4 text-success" />
+                    <Check className="h-4 w-4 text-green-600" />
                   ) : (
                     <X className="h-4 w-4 text-muted-foreground" />
                   )}
@@ -146,7 +131,7 @@ const ViewInternDialog = ({ open, onOpenChange, intern }: ViewInternDialogProps)
                 <p className="text-xs text-muted-foreground">Full-Time Conversion</p>
                 <div className="flex items-center gap-2">
                   {intern.full_time_conversion ? (
-                    <Check className="h-4 w-4 text-success" />
+                    <Check className="h-4 w-4 text-green-600" />
                   ) : (
                     <X className="h-4 w-4 text-muted-foreground" />
                   )}
