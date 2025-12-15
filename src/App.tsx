@@ -20,8 +20,8 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
-          <Route path="/persons" element={<PersonSelection />} />
-          <Route path="/interns/:personId" element={<InternDashboard />} />
+          <Route path="/user" element={<PersonSelection />} />
+          <Route path="/interns/:userId" element={<InternDashboard />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
