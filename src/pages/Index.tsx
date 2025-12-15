@@ -8,7 +8,7 @@ const Index = () => {
     // Check if user is authenticated
     const isAuthenticated = localStorage.getItem("isAuthenticated");
     if (isAuthenticated) {
-      navigate("/persons");
+      navigate("/user");
     } else {
       navigate("/auth");
     }
